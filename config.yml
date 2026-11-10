@@ -658,3 +658,4 @@ site:
         before you sign.
   meta:
     favicon: /images/logo.png
+    shareImage: /images/halite/share.png

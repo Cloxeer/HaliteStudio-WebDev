@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Service Agreement Summary | Halite Studio</title>
 <meta name="description" content="I&#39;m Sebastian, a CS student in Las Cruces. I build custom landing pages for restaurants, tattoo shops, and local businesses. Fast on phones. From $500. We sit on Zoom together."/>
+<meta property="og:type" content="website"/>
+<meta property="og:title" content="Service Agreement Summary | Halite Studio"/>
+<meta property="og:description" content="I&#39;m Sebastian, a CS student in Las Cruces. I build custom landing pages for restaurants, tattoo shops, and local businesses. Fast on phones. From $500. We sit on Zoom together."/>
+<meta property="og:image" content="https://halitestudio.com/images/halite/share.png"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:image" content="https://halitestudio.com/images/halite/share.png"/>
 <link rel="icon" href="https://halitestudio.com/favicon.ico" sizes="any"/>
 <link rel="shortcut icon" href="https://halitestudio.com/favicon.ico"/>
 <link rel="icon" type="image/x-icon" href="https://halitestudio.com/favicon.ico"/>
@@ -3026,7 +3032,7 @@ body.wd-has-flow main :is(
     frame: { inset: 14, label: 'FIG. 0' },
     explode: {
       rest: 0.5, hover: 1, figureHover: 0.85, tiltMax: 0.7, lift: 0.14, pad: 16, baseGap: 0.18, gapRange: 0.9,
-      slab: { w: 1.7, d: 1.2, t: 0.06, inner: 0.22 }, angle: -0.12, scale: 64
+      slab: { w: 1.7, d: 1.2, t: 0.06, inner: 0.22 }, angle: -0.12, scale: 64, spinSeconds: 28
     },
     layers: [
       ['Tap to call and Maps', 'Buttons that dial or open directions in one tap.'],
@@ -3045,7 +3051,7 @@ body.wd-has-flow main :is(
     ],
     svc: { stagger: 0.09, draw: 1.1 },
     lace: { rail: 22, edge: 8, step: 3, chunk: 240, readLine: 0.62, press: 0.72, ease: 0.12, clearance: 18, linkPad: 14, loopMin: 24, loopRadius: 48, pad: 16, cutPad: 6, emailPad: 12, arrowDeg: 45 },
-    ink: { ampRatio: 0.07, bow: 0.35, step: 3, taper: 26, startThin: 0.55, pressMin: 0.66, ease: 0.14, readLine: 0.45 },
+    pen: { ampRatio: 0.07, bow: 0.35, step: 3, taper: 26, startThin: 0.55, pressMin: 0.66, ease: 0.14, readLine: 0.45 },
     // Services icons, one per card id, so each one says what its card says
     svcIcons: {
       brand: '<path d="M3 9l1.5-5h15L21 9"/><path d="M3 9a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0"/><path d="M5 12v8h14v-8"/><path d="M10 20v-5h4v5"/>',
@@ -3287,7 +3293,7 @@ body.wd-has-flow main :is(
     if (anchor) pricing.insertBefore(fig, anchor); else pricing.appendChild(fig);
 
     var wake = function () {};
-    var n = layers.length, hot = -1, ex = E.rest, exT = E.rest, tilt = 0, tiltT = 0;
+    var n = layers.length, hot = -1, ex = E.rest, exT = E.rest, tilt = 0, tiltT = 0, spin = 0, lastT = 0;
     var lift = []; for (var q0 = 0; q0 < n; q0++) lift.push(0);
     layers.forEach(function (l, i) {
       var li = document.createElement('li');
@@ -3323,7 +3329,7 @@ body.wd-has-flow main :is(
     };
     var draw = function () {
       svg.replaceChildren();
-      var a = E.angle + tilt, gap = E.baseGap + ex * E.gapRange, S = E.slab;
+      var a = E.angle + tilt + spin, gap = E.baseGap + ex * E.gapRange, S = E.slab;
       var x0 = -S.w / 2, x1 = S.w / 2, y0 = -S.d / 2, y1 = S.d / 2;
       var top = (n - 1) * gap + S.t + E.lift + 0.3;
       var Q = function (x, y, zz) { return P(x, y, zz, a); };
@@ -3357,33 +3363,40 @@ body.wd-has-flow main :is(
     // measure the largest the drawing can get, so nothing ever leaves its box
     var measure = function () {
       bb = [1e9, 1e9, -1e9, -1e9];
-      var saved = [ex, tilt, hot, lift.slice()];
-      [0, 1].forEach(function (e) { [-E.tiltMax / 2, 0, E.tiltMax / 2].forEach(function (t) {
-        [-1, 0, n - 1].forEach(function (h) { ex = e; tilt = t; hot = h; for (var i = 0; i < n; i++) lift[i] = (h === i) ? E.lift : 0; draw(); });
-      }); });
+      var saved = [ex, tilt, hot, lift.slice(), spin];
+      for (var sp = 0; sp < 12; sp++) { spin = sp * Math.PI / 6;
+        [0, 1].forEach(function (e) { [-E.tiltMax / 2, E.tiltMax / 2].forEach(function (t) {
+          [-1, 0, n - 1].forEach(function (h) { ex = e; tilt = t; hot = h; for (var i = 0; i < n; i++) lift[i] = (h === i) ? E.lift : 0; draw(); });
+        }); });
+      }
+      spin = saved[4];
       var pad = E.pad;
-      svg.setAttribute('viewBox', (bb[0] - pad).toFixed(0) + ' ' + (bb[1] - pad).toFixed(0) + ' ' + (bb[2] - bb[0] + pad * 2).toFixed(0) + ' ' + (bb[3] - bb[1] + pad * 2).toFixed(0));
+      var vbW = Math.round(bb[2] - bb[0] + pad * 2), vbH = Math.round(bb[3] - bb[1] + pad * 2);
+      svg.setAttribute('viewBox', Math.round(bb[0] - pad) + ' ' + Math.round(bb[1] - pad) + ' ' + vbW + ' ' + vbH);
+      svg.setAttribute('width', vbW); svg.setAttribute('height', vbH);
+      svg.style.aspectRatio = vbW + ' / ' + vbH;
       bb = null; ex = saved[0]; tilt = saved[1]; hot = saved[2]; lift = saved[3];
     };
     measure();
     if (reduce) { ex = exT = 0.7; draw(); }
     else {
-      // runs only while something is still moving and the figure is on screen; sleeps otherwise
-      var awake = false, visible = true, EPS = 0.002;
-      var loop = function () {
+      // runs while the figure is on screen (idle circle + easing); sleeps when it scrolls away or the tab is hidden
+      var awake = false, visible = true;
+      var loop = function (now) {
+        var dt = lastT ? Math.min(now - lastT, 50) : 16; lastT = now;
         ex += (exT - ex) * 0.08; tilt += (tiltT - tilt) * 0.07;
-        var moving = Math.abs(exT - ex) > EPS || Math.abs(tiltT - tilt) > EPS;
+        if (hot < 0) spin += dt / 1000 * 2 * Math.PI / E.spinSeconds;   // slow idle circle; holds still while you read a layer
         for (var i = 0; i < n; i++) {
           var goal = (hot === i) ? E.lift : 0;
           lift[i] += (goal - lift[i]) * 0.14;
-          if (Math.abs(goal - lift[i]) > EPS) moving = true;
         }
         draw();
-        if (moving && visible) requestAnimationFrame(loop); else awake = false;
+        if (visible && !document.hidden) requestAnimationFrame(loop); else { awake = false; lastT = 0; }
       };
       wake = function () { if (!awake && visible) { awake = true; requestAnimationFrame(loop); } };
       if ('IntersectionObserver' in window) {
         new IntersectionObserver(function (es) { visible = es[0].isIntersecting; if (visible) wake(); }).observe(fig);
+        document.addEventListener('visibilitychange', wake);
       }
       draw(); wake();
     }
@@ -3495,7 +3508,7 @@ body.wd-has-flow main :is(
   var smooth = function (a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   // turns a centreline + per-point pressure into one filled ink shape with round tip and soft start
   var inkOutline = function (P, press, F, baseW) {
-    var K = CFG.ink, n = P.length, Ls = [], Rs = [], tan = [], hw = [];
+    var K = CFG.pen, n = P.length, Ls = [], Rs = [], tan = [], hw = [];
     for (var q = 0; q < n; q++) {
       var a = P[Math.max(q - 1, 0)], b = P[Math.min(q + 1, n - 1)];
       var tx = b[0] - a[0], ty = b[1] - a[1], len = Math.hypot(tx, ty) || 1; tx /= len; ty /= len; tan.push([tx, ty]);
@@ -3581,7 +3594,7 @@ body.wd-has-flow main :is(
   var rail = $('.wd-workflow-rail')[0];
   var stepNodes = rail ? $('.wd-workflow-node', rail) : [];
   if (rail && stepNodes.length > 1) {
-    var K = CFG.ink;
+    var K = CFG.pen;
     var inkSvg = document.createElementNS(CFG.svgNS, 'svg');
     inkSvg.setAttribute('class', 'fx-ink'); inkSvg.setAttribute('aria-hidden', 'true');
     var ghost = document.createElementNS(CFG.svgNS, 'path'); ghost.setAttribute('class', 'fx-ink-ghost');
