@@ -110,6 +110,7 @@ project:
       label: Apply
 site:
   type: web-developer
+  effects: true
   integrations:
     cmsEnabled: true
     customDomain: halitestudio.com

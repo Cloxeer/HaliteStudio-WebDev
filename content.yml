@@ -65,15 +65,6 @@ services:
         fast, show your photos, and make it easy to call or visit.
       href: /services#framework
       cta: How we build
-    - id: updates
-      prompt: I'll need to update
-      emphasis: my menu later.
-      icon: Layers
-      serviceTitle: Change it yourself
-      body: Your site comes with a simple editor so you can change menu items, photos,
-        and hours without waiting on me. Bigger changes, I quote first.
-      href: /pricing
-      cta: See what's included
     - id: apply
       prompt: I'm ready for a
       emphasis: friendly conversation.

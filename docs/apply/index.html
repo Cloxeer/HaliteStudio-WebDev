@@ -2968,6 +2968,816 @@ body.wd-has-flow main :is(
     }
   }
 
+
+(function () {
+  'use strict';
+  if (document.documentElement.dataset.haliteFx) return;
+  document.documentElement.dataset.haliteFx = '1';
+
+  // ---- one source of truth for every number, colour and label ----
+  var CFG = {
+    ink: '#2a1c14',
+    muted: '#7a6252',
+    accent: 'var(--color-accent)',
+    accentSolid: '#a65a2e',
+    svgNS: 'http://www.w3.org/2000/svg',
+    tiles: { radius: 150, scale: 0.14, lift: 7, ease: 0.2 },
+    tilt: { maxY: 16, maxX: 12, lift: 1.02, perspective: 1000, moveMs: 120, leaveMs: 600 },
+    frame: { inset: 14, label: 'FIG. 0' },
+    explode: {
+      rest: 0.5, hover: 1, figureHover: 0.85, tiltMax: 0.7, lift: 0.14, pad: 16, baseGap: 0.18, gapRange: 0.9,
+      slab: { w: 1.7, d: 1.2, t: 0.06, inner: 0.22 }, angle: -0.12, scale: 64
+    },
+    layers: [
+      ['Tap to call and Maps', 'Buttons that dial or open directions in one tap.'],
+      ['Phone-first page', 'Built for the screen they are holding.'],
+      ['Your photos and words', 'Your shop, not a template stock photo.'],
+      ['Domain and hosting', 'You register the domain. We connect it at launch.']
+    ],
+    explodeCopy: { title: 'What the price is made of', sub: 'Four layers. Hover one to lift it out.' },
+    icons: [
+      '<circle pathLength="1" cx="12" cy="12" r="9"/><path pathLength="1" d="M15.5 8.5l-2 5-5 2 2-5z"/>',
+      '<rect pathLength="1" x="3" y="6" width="13" height="12" rx="2"/><path pathLength="1" d="M16 10l5-3v10l-5-3z"/>',
+      '<rect pathLength="1" x="4" y="3" width="16" height="18" rx="2"/><path pathLength="1" d="M4 9h16M9 9v12"/>',
+      '<path pathLength="1" d="M4 20l1-4L16 5l3 3L8 19z"/><path pathLength="1" d="M14 7l3 3"/>',
+      '<path pathLength="1" d="M12 21s-6-5.2-6-10a6 6 0 0112 0c0 4.8-6 10-6 10z"/><circle pathLength="1" cx="12" cy="11" r="2.2"/>',
+      '<path pathLength="1" d="M3 12V4h8l10 10-8 8z"/><circle pathLength="1" cx="7.5" cy="8.5" r="1.2"/>'
+    ],
+    svc: { stagger: 0.09, draw: 1.1 },
+    lace: { rail: 22, edge: 8, step: 3, chunk: 240, readLine: 0.62, press: 0.72, ease: 0.12, clearance: 18, linkPad: 14, loopMin: 24, loopRadius: 48, pad: 16, cutPad: 6, emailPad: 12, arrowDeg: 45 },
+    ink: { ampRatio: 0.07, bow: 0.35, step: 3, taper: 26, startThin: 0.55, pressMin: 0.66, ease: 0.14, readLine: 0.45 },
+    // Services icons, one per card id, so each one says what its card says
+    svcIcons: {
+      brand: '<path d="M3 9l1.5-5h15L21 9"/><path d="M3 9a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0"/><path d="M5 12v8h14v-8"/><path d="M10 20v-5h4v5"/>',
+      pricing: '<circle cx="12" cy="12" r="9"/><path d="M14.6 9.3c-.4-.9-1.4-1.4-2.6-1.4-1.5 0-2.6.8-2.6 2 0 2.7 5.2 1.3 5.2 4 0 1.2-1.1 2-2.6 2-1.3 0-2.3-.5-2.7-1.5"/><path d="M12 6.4v1.5M12 16.1v1.5"/>',
+      cost: '<rect x="3" y="4.5" width="18" height="12.5" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M9 11.5l3-3 3 3M12 8.5v5"/>',
+      mobile: '<path d="M12 21.5s-6.5-5.4-6.5-11a6.5 6.5 0 0113 0c0 5.6-6.5 11-6.5 11z"/><circle cx="12" cy="10.5" r="2.5"/>'
+    },
+    about: { highlightIcons: [2, 1, 5, 4], frameLabel: 'THE BUILDER', tilt: 8 },
+    minWordsForAccent: 3
+  };
+
+  var fine = matchMedia('(hover:hover) and (pointer:fine)').matches;
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var pointerFx = fine && !reduce;
+  function $(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+
+  // ---- styles ----
+  var style = document.createElement('style');
+  style.textContent = [
+    '.wd-hero-eyebrow,.wd-portfolio-tags span,.wd-pricing-beta-badge{font-family:ui-monospace,Consolas,monospace;letter-spacing:.09em}',
+    '.wd-page-intro h1 em.fx-accent{font-style:italic;color:var(--color-accent);font-weight:600}',
+    '.wd-portfolio-screenshot-swap{position:relative}',
+    '.fx-frame{position:absolute;left:0;top:0;width:100%;height:100%;border:1px solid rgba(42,28,20,.22);border-radius:26px;pointer-events:none}',
+    '.fx-frame.fx-ready{transition:left var(--wd-portfolio-fade-duration,1s) ease-in-out,top var(--wd-portfolio-fade-duration,1s) ease-in-out,width var(--wd-portfolio-fade-duration,1s) ease-in-out,height var(--wd-portfolio-fade-duration,1s) ease-in-out}',
+    // sides move as groups: no per-card stagger, and right-side cards run in the opposite phase to left-side cards
+    '.wd-portfolio-item .wd-portfolio-slide-layer,.wd-portfolio-item .fx-frame.fx-ready{transition-delay:0s}',
+    '.wd-portfolio-item.image-second .wd-portfolio-screenshot-swap>.wd-portfolio-slide-layer-mobile{opacity:0}',
+    '.wd-portfolio-item.image-second .wd-portfolio-screenshot-swap>.wd-portfolio-slide-layer-desktop{opacity:1}',
+    '.wd-portfolio-item.image-second .wd-portfolio-screenshot-swap.is-swapped>.wd-portfolio-slide-layer-mobile{opacity:1}',
+    '.wd-portfolio-item.image-second .wd-portfolio-screenshot-swap.is-swapped>.wd-portfolio-slide-layer-desktop{opacity:0}',
+    '.fx-frame::before,.fx-frame::after{content:"";position:absolute;width:11px;height:11px;border:1.5px solid var(--color-accent)}',
+    '.fx-frame::before{top:-1px;left:-1px;border-right:0;border-bottom:0;border-radius:9px 0 0 0}',
+    '.fx-frame::after{right:-1px;bottom:-1px;border-left:0;border-top:0;border-radius:0 0 9px 0}',
+    '.fx-frame b{position:absolute;top:-9px;right:22px;padding:0 8px;background:var(--wd-page-bg,#fbf8f4);font:500 11px ui-monospace,Consolas,monospace;letter-spacing:.1em;color:' + CFG.muted + '}',
+    '.fx-tilt{will-change:transform}',
+    // services: an odd last row centres itself instead of hugging the left edge
+    '.wd-service-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:1rem}',
+    '.wd-service-grid>.wd-service-card{flex:0 0 100%;min-width:0}',
+    '@media(min-width:640px){.wd-service-grid>.wd-service-card{flex-basis:calc((100% - 1rem) / 2)}}',
+    '@media(min-width:1024px){.wd-service-grid>.wd-service-card{flex-basis:calc((100% - 2rem) / 3)}}',
+    // services: the icons draw their own lines (no tile). Hidden only while armed, so they are never missing at rest.
+    '.fx-svc-arm .wd-service-icon *{stroke-dasharray:1;stroke-dashoffset:1}',
+    '.fx-svc-in .wd-service-icon *{stroke-dasharray:1;animation:fx-draw ' + CFG.svc.draw + 's cubic-bezier(.22,.61,.36,1) var(--fx-d,0s) both}',
+    '.fx-svc-redraw .wd-service-icon *{stroke-dasharray:1;animation:fx-draw .9s cubic-bezier(.22,.61,.36,1) both}',
+    '@media(prefers-reduced-motion:reduce){.fx-svc-arm .wd-service-icon *,.fx-svc-in .wd-service-icon *,.fx-svc-redraw .wd-service-icon *{stroke-dasharray:none;stroke-dashoffset:0;animation:none}}',
+    // process: the straight bar gives way to the ink stroke
+    '.wd-workflow-line{display:none}',
+    '.fx-ink{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:var(--wd-flow-z,1)}',
+    '.fx-ink-line{fill:var(--wd-flow-stroke,#1d1d1f)}',
+    '.fx-lace{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:var(--wd-flow-z,1);opacity:var(--wd-flow-fade,.85)}',
+    '.fx-lace-on .wd-flow-clip{display:none}',
+    '.fx-arrow{opacity:0;transform:scale(.6);transform-origin:0 0;transition:opacity .7s ease,transform .7s cubic-bezier(.22,.61,.36,1)}',
+    '.fx-arrow.on{opacity:1;transform:scale(1)}',
+    '@media(prefers-reduced-motion:reduce){.fx-arrow{transition:none}}',
+    // left-column cards lean toward the line, so the loop around "Visit live site" sits next to it
+    '@media(min-width:1024px){.fx-lace-on .wd-portfolio-item.image-second .wd-portfolio-copy{text-align:right}.fx-lace-on .wd-portfolio-item.image-second .wd-portfolio-tags{justify-content:flex-end}}',
+    '.fx-ink-ghost{fill:none;stroke:var(--wd-flow-stroke,#1d1d1f);stroke-opacity:.1;stroke-width:1.5px;stroke-linecap:round}',
+    '.fx-tiles-live .wd-hero-tile{will-change:transform,scale,translate}',
+    '.wd-founder-portrait{position:relative}',
+    '.fx-portrait-frame{position:absolute;inset:-' + CFG.frame.inset + 'px;border:1px solid rgba(42,28,20,.22);border-radius:26px;pointer-events:none}',
+    '.fx-portrait-frame::before,.fx-portrait-frame::after{content:"";position:absolute;width:11px;height:11px;border:1.5px solid var(--color-accent)}',
+    '.fx-portrait-frame::before{top:-1px;left:-1px;border-right:0;border-bottom:0;border-radius:9px 0 0 0}',
+    '.fx-portrait-frame::after{right:-1px;bottom:-1px;border-left:0;border-top:0;border-radius:0 0 9px 0}',
+    '.fx-portrait-frame b{position:absolute;top:-9px;right:22px;padding:0 8px;background:var(--wd-page-bg,#fbf8f4);font:500 11px ui-monospace,Consolas,monospace;letter-spacing:.1em;color:' + CFG.muted + '}',
+    '.wd-founder-highlights li .fx-ico-wrap{width:40px;height:40px;margin:0 .8rem 0 0;border-radius:11px;flex:none}',
+    '.wd-founder-highlights li .fx-ico{width:21px;height:21px}',
+    '.wd-founder-highlights li{display:flex;align-items:center}',
+    '.fx-arm .wd-founder-copy>*,.fx-arm .wd-founder-highlights li{opacity:0;transform:translateY(10px)}',
+    '.fx-in .wd-founder-copy>*,.fx-in .wd-founder-highlights li{opacity:1;transform:none;transition:opacity .7s ease,transform .7s cubic-bezier(.22,.61,.36,1)}',
+    '.fx-in .wd-founder-copy>*:nth-child(2){transition-delay:.08s}.fx-in .wd-founder-copy>*:nth-child(3){transition-delay:.14s}.fx-in .wd-founder-copy>*:nth-child(4){transition-delay:.2s}.fx-in .wd-founder-copy>*:nth-child(5){transition-delay:.26s}',
+    '.fx-in .wd-founder-highlights li:nth-child(1){transition-delay:.3s}.fx-in .wd-founder-highlights li:nth-child(2){transition-delay:.38s}.fx-in .wd-founder-highlights li:nth-child(3){transition-delay:.46s}.fx-in .wd-founder-highlights li:nth-child(4){transition-delay:.54s}',
+    '.fx-explode{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:2rem;align-items:center;max-width:62rem;margin:0 auto;padding:1.5rem 1rem;border-top:1px solid rgba(42,28,20,.18);border-bottom:1px solid rgba(42,28,20,.18)}',
+    '.fx-stage{min-width:0;overflow:hidden}',
+    '.fx-explode svg{width:100%;height:auto;display:block;overflow:hidden}',
+    '.fx-explode h3{font-size:1.5rem;margin:0 0 .35rem}.fx-explode p.fx-sub{margin:0 0 1rem;color:' + CFG.muted + '}',
+    '.fx-explode ol{list-style:none;margin:0;padding:0;display:grid}',
+    '.fx-explode li{display:flex;gap:.9rem;align-items:baseline;padding:.7rem 0;border-top:1px solid rgba(42,28,20,.16);cursor:default;transition:color .25s}',
+    '.fx-explode li div{transition:transform .3s cubic-bezier(.22,.61,.36,1)}',
+    '.fx-explode li.on div{transform:translateX(.5rem)}',
+    '.fx-explode li:first-child{border-top:0}',
+    '.fx-explode li span{font:500 11px ui-monospace,Consolas,monospace;letter-spacing:.1em;color:' + CFG.muted + ';min-width:2.2rem}',
+    '.fx-explode li.on{color:var(--color-accent)}',
+    '@media(max-width:760px){.fx-explode{grid-template-columns:1fr}}',
+    '.wd-workflow-row-flip .fx-ico-wrap{margin-left:auto}',
+    '.fx-ico-wrap{display:grid;place-items:center;width:52px;height:52px;max-width:100%;margin-bottom:.8rem;border:1px solid rgba(42,28,20,.16);border-radius:14px;background:rgba(166,90,46,.06);color:var(--color-accent)}',
+    '.fx-ico{width:26px;height:26px;display:block}',
+    '.fx-arm .wd-workflow-copy h3,.fx-arm .wd-workflow-copy p,.fx-arm .fx-ico-wrap{opacity:0;transform:translateY(10px)}',
+    '.fx-in .wd-workflow-copy h3,.fx-in .wd-workflow-copy p,.fx-in .fx-ico-wrap{opacity:1;transform:none;transition:opacity .7s ease,transform .7s cubic-bezier(.22,.61,.36,1)}',
+    '.fx-in .wd-workflow-copy h3{transition-delay:.12s}.fx-in .wd-workflow-copy p{transition-delay:.24s}',
+    '@keyframes fx-pulse{from{box-shadow:0 0 0 0 rgba(166,90,46,.45)}to{box-shadow:0 0 0 18px rgba(166,90,46,0)}}',
+    '@media(prefers-reduced-motion:no-preference){.fx-arm.fx-in .wd-workflow-node{animation:fx-pulse 1.3s ease-out .1s 1}}',
+    '.fx-ico *{fill:none;stroke:currentColor;stroke-width:1.3;stroke-linecap:round;stroke-linejoin:round}',
+    '@keyframes fx-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}',
+    '.fx-in .fx-ico *{stroke-dasharray:1;animation:fx-draw 1.1s cubic-bezier(.22,.61,.36,1) .2s both}',
+    '@media(prefers-reduced-motion:reduce){.fx-in .fx-ico *{animation:none;stroke-dasharray:none}}'
+  ].join('\n');
+  document.head.appendChild(style);
+
+  // ---- 4. headline accent: last word of each page-intro headline goes italic ----
+  $('.wd-page-intro h1').forEach(function (h) {
+    var text = h.textContent.trim();
+    var end = /[.]$/.test(text) ? '.' : '';
+    var words = text.replace(/[.]$/, '').split(' ');
+    if (words.length < CFG.minWordsForAccent) return;
+    var last = words.pop();
+    h.textContent = '';
+    h.appendChild(document.createTextNode(words.join(' ') + ' '));
+    var em = document.createElement('em');
+    em.className = 'fx-accent';
+    em.textContent = last;
+    h.appendChild(em);
+    if (end) h.appendChild(document.createTextNode(end));
+  });
+
+  // ---- 0. hero perf: once the intro cascade ends, let go of the finished tile animations ----
+  // (the site keeps every tile animation alive forever via fill-mode, pinning hundreds of layers)
+  var tileGrid = $('.wd-hero-tiles')[0];
+  if (tileGrid && !reduce) {
+    var release = function (tries) {
+      var anims = tileGrid.getAnimations ? tileGrid.getAnimations({ subtree: true }) : [];
+      if (!anims.length) { if (tries > 0) setTimeout(function () { release(tries - 1); }, 300); return; }
+      Promise.all(anims.map(function (a) { return a.finished; })).then(function () {
+        tileGrid.classList.remove('is-cascading');
+        if (fine) tileGrid.classList.add('fx-tiles-live');   // one-time promotion: lifting tiles is then compositor-only
+      }, function () {});
+    };
+    release(8);
+  }
+
+  // ---- 1. hero tiles: the squares near the pointer lift up ----
+  var media = $('.wd-hero-media')[0];
+  if (media && pointerFx) {
+    var T = CFG.tiles;
+    var tiles = $('.wd-hero-tile').filter(function (t) { return t.offsetParent !== null; });
+    var pts = [], cur = [], mx = -9999, my = -9999, running = false;
+    var measure = function () {
+      var r = media.getBoundingClientRect();
+      pts = tiles.map(function (t) { var b = t.getBoundingClientRect(); return [b.left - r.left + b.width / 2, b.top - r.top + b.height / 2]; });
+      cur = tiles.map(function () { return 0; });
+    };
+    var step = function () {
+      var live = false, R = T.radius, R2 = R * R;
+      for (var i = 0; i < tiles.length; i++) {
+        var dx = pts[i][0] - mx, dy = pts[i][1] - my, d2 = dx * dx + dy * dy;
+        var target = d2 < R2 ? 1 - Math.sqrt(d2) / R : 0;
+        target = target * target * (3 - 2 * target);
+        var next = cur[i] + (target - cur[i]) * T.ease;
+        if (Math.abs(target - next) < 0.004) next = target;   // close enough: land exactly on the target, so every tile fully settles
+        // only tiles that are still moving touch the DOM
+        if (next !== cur[i]) {
+          cur[i] = next;
+          tiles[i].style.scale = next > 0 ? (1 + next * T.scale).toFixed(3) : '';
+          tiles[i].style.translate = next > 0 ? '0 ' + (-next * T.lift).toFixed(1) + 'px' : '';
+        }
+        if (cur[i] !== target) live = true;
+      }
+      running = live;
+      if (live) requestAnimationFrame(step);
+    };
+    var kick = function () { if (!running) { running = true; requestAnimationFrame(step); } };
+    media.addEventListener('pointermove', function (e) {
+      if (!pts.length) measure();
+      var r = media.getBoundingClientRect();
+      mx = e.clientX - r.left; my = e.clientY - r.top; kick();
+    });
+    media.addEventListener('pointerleave', function () { mx = my = -9999; kick(); });
+    addEventListener('resize', function () { pts = []; });
+  }
+
+
+  // ---- 3. work: hairline frame + tilt toward the pointer ----
+  $('.wd-portfolio-image').forEach(function (box, i) {
+    var inner = box.querySelector('.wd-portfolio-screenshot-swap') || box.firstElementChild;
+    if (!inner) return;
+    var f = document.createElement('div');
+    f.className = 'fx-frame';
+    var label = document.createElement('b');
+    label.textContent = CFG.frame.label + (i + 1);
+    f.appendChild(label);
+    inner.appendChild(f);
+    // zig-zag: image left, right, left, top down (desktop; stacks on small screens)
+    var item = box.closest('.wd-portfolio-item');
+    if (item) item.classList.toggle('image-second', i % 2 === 1);
+    // the frame hugs whatever is showing: the phone, or the whole desktop browser; it glides between them
+    var phone = inner.querySelector('.wd-portfolio-phone');
+    var fit = function () {
+      var pad = CFG.frame.inset, l, t, w, h;
+      var showsDesktop = inner.classList.contains('is-swapped') !== (item ? item.classList.contains('image-second') : false);
+      if (showsDesktop || !phone || !phone.offsetWidth) {
+        l = 0; t = 0; w = inner.offsetWidth; h = inner.offsetHeight;
+      } else {
+        var layer = phone.offsetParent || inner;
+        l = layer.offsetLeft + phone.offsetLeft; t = layer.offsetTop + phone.offsetTop; w = phone.offsetWidth; h = phone.offsetHeight;
+      }
+      f.style.left = (l - pad) + 'px'; f.style.top = (t - pad) + 'px';
+      f.style.width = (w + pad * 2) + 'px'; f.style.height = (h + pad * 2) + 'px';
+    };
+    fit();
+    requestAnimationFrame(function () { requestAnimationFrame(function () { f.classList.add('fx-ready'); }); });
+    new MutationObserver(fit).observe(inner, { attributes: true, attributeFilter: ['class'] });
+    if (phone && !phone.complete) phone.addEventListener('load', fit);
+    if ('ResizeObserver' in window) new ResizeObserver(fit).observe(inner); else addEventListener('resize', fit);
+    if (!pointerFx) return;
+    inner.classList.add('fx-tilt');
+    var K = CFG.tilt;
+    box.addEventListener('pointermove', function (e) {
+      var r = box.getBoundingClientRect();
+      var x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
+      inner.style.transition = 'transform ' + K.moveMs + 'ms ease-out';
+      inner.style.transform = 'perspective(' + K.perspective + 'px) rotateY(' + (x * K.maxY).toFixed(2) + 'deg) rotateX(' + (-y * K.maxX).toFixed(2) + 'deg) scale(' + K.lift + ')';
+    });
+    box.addEventListener('pointerleave', function () {
+      inner.style.transition = 'transform ' + K.leaveMs + 'ms cubic-bezier(.2,.7,.2,1)';
+      inner.style.transform = '';
+    });
+  });
+
+  // ---- 2. pricing: exploded layers ----
+  var pricing = $('.wd-pricing-inner')[0];
+  if (pricing) {
+    var E = CFG.explode, layers = CFG.layers;
+    var fig = document.createElement('figure');
+    fig.className = 'fx-explode';
+    fig.style.margin = '0 auto';
+    var stage = document.createElement('div');
+    stage.className = 'fx-stage';
+    var svg = document.createElementNS(CFG.svgNS, 'svg');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'Four layers of a landing page, drawn separated');
+    stage.appendChild(svg);
+    var side = document.createElement('div');
+    var h3 = document.createElement('h3'); h3.textContent = CFG.explodeCopy.title;
+    var sub = document.createElement('p'); sub.className = 'fx-sub'; sub.textContent = CFG.explodeCopy.sub;
+    var ol = document.createElement('ol');
+    side.appendChild(h3); side.appendChild(sub); side.appendChild(ol);
+    fig.appendChild(stage); fig.appendChild(side);
+    var hdr = $('.wd-pricing-header')[0];
+    var anchor = hdr ? hdr.nextElementSibling : pricing.firstChild;
+    if (anchor) pricing.insertBefore(fig, anchor); else pricing.appendChild(fig);
+
+    var wake = function () {};
+    var n = layers.length, hot = -1, ex = E.rest, exT = E.rest, tilt = 0, tiltT = 0;
+    var lift = []; for (var q0 = 0; q0 < n; q0++) lift.push(0);
+    layers.forEach(function (l, i) {
+      var li = document.createElement('li');
+      var tag = document.createElement('span'); tag.textContent = 'L' + (n - i);
+      var body = document.createElement('div');
+      var strong = document.createElement('strong'); strong.textContent = l[0];
+      var small = document.createElement('small'); small.style.color = CFG.muted; small.textContent = l[1];
+      body.appendChild(strong); body.appendChild(document.createElement('br')); body.appendChild(small);
+      li.appendChild(tag); li.appendChild(body);
+      li.addEventListener('pointerenter', function () { hot = i; exT = E.hover; li.classList.add('on'); wake(); });
+      li.addEventListener('pointerleave', function () { hot = -1; exT = E.rest; li.classList.remove('on'); wake(); });
+      ol.appendChild(li);
+    });
+
+    var C = Math.cos(Math.PI / 6), bb = null;
+    var P = function (x, y, z, a) {
+      var c = Math.cos(a), s = Math.sin(a), X = x * c - y * s, Y = x * s + y * c;
+      return [(X - Y) * C * E.scale, (X + Y) * 0.5 * E.scale - z * E.scale];
+    };
+    var grow = function (x, y) {
+      if (!bb) return;
+      if (x < bb[0]) bb[0] = x; if (y < bb[1]) bb[1] = y; if (x > bb[2]) bb[2] = x; if (y > bb[3]) bb[3] = y;
+    };
+    var add = function (name, attrs) {
+      var e = document.createElementNS(CFG.svgNS, name);
+      for (var k in attrs) e.setAttribute(k, attrs[k]);
+      e.setAttribute('vector-effect', 'non-scaling-stroke');
+      svg.appendChild(e); return e;
+    };
+    var poly = function (pts, fill, stroke, sw) {
+      pts.forEach(function (p) { grow(p[0], p[1]); });
+      add('polygon', { points: pts.map(function (q) { return q[0].toFixed(1) + ',' + q[1].toFixed(1); }).join(' '), fill: fill, stroke: stroke, 'stroke-width': sw, 'stroke-linejoin': 'round' });
+    };
+    var draw = function () {
+      svg.replaceChildren();
+      var a = E.angle + tilt, gap = E.baseGap + ex * E.gapRange, S = E.slab;
+      var x0 = -S.w / 2, x1 = S.w / 2, y0 = -S.d / 2, y1 = S.d / 2;
+      var top = (n - 1) * gap + S.t + E.lift + 0.3;
+      var Q = function (x, y, zz) { return P(x, y, zz, a); };
+      // ground shadow + dashed axis (behind the slabs)
+      var g = Q(0, 0, -0.12), rx = S.w * E.scale * 0.95;
+      grow(g[0] - rx, g[1] - rx * 0.3); grow(g[0] + rx, g[1] + rx * 0.3);
+      add('ellipse', { cx: g[0], cy: g[1], rx: rx, ry: rx * 0.3, fill: 'rgba(42,28,20,.07)', stroke: 'none' });
+      var ax0 = Q(0, 0, -0.12), ax1 = Q(0, 0, top);
+      grow(ax1[0], ax1[1]);
+      add('line', { x1: ax0[0], y1: ax0[1], x2: ax1[0], y2: ax1[1], stroke: CFG.ink, 'stroke-opacity': 0.35, 'stroke-width': 1, 'stroke-dasharray': '3 4' });
+      for (var k = 0; k < n; k++) {
+        var idx = n - 1 - k, on = hot === idx;
+        var z = k * gap + lift[idx], z1 = z + S.t;
+        var stroke = on ? CFG.accentSolid : CFG.ink;
+        var fill = on ? 'rgba(166,90,46,.12)' : 'rgba(255,250,244,.94)';
+        [[[x0, y0], [x1, y0]], [[x1, y0], [x1, y1]], [[x1, y1], [x0, y1]], [[x0, y1], [x0, y0]]].forEach(function (s) {
+          var q = [Q(s[0][0], s[0][1], z1), Q(s[1][0], s[1][1], z1), Q(s[1][0], s[1][1], z), Q(s[0][0], s[0][1], z)];
+          var ar = (q[1][0] - q[0][0]) * (q[2][1] - q[0][1]) - (q[1][1] - q[0][1]) * (q[2][0] - q[0][0]);
+          if (ar < 0) poly(q, fill, stroke, 1.2);
+        });
+        poly([Q(x0, y0, z1), Q(x1, y0, z1), Q(x1, y1, z1), Q(x0, y1, z1)], fill, stroke, 1.2);
+        var m = S.inner;
+        poly([Q(x0 + m, y0 + m, z1), Q(x1 - m, y0 + m, z1), Q(x1 - m, y1 - m, z1), Q(x0 + m, y1 - m, z1)], 'none', stroke, 0.7);
+        // small layer tag at the right-hand corner of each slab
+        var c = Q(x1, y0, z1 - S.t / 2), tx = c[0] + 12, ty = c[1] + 3;
+        grow(tx + 18, ty + 4);
+        var t = add('text', { x: tx, y: ty, fill: on ? CFG.accentSolid : CFG.muted, 'font-size': 10, 'font-family': 'ui-monospace,Consolas,monospace', 'letter-spacing': '.08em' });
+        t.removeAttribute('vector-effect'); t.textContent = 'L' + (k + 1);
+      }
+    };
+    // measure the largest the drawing can get, so nothing ever leaves its box
+    var measure = function () {
+      bb = [1e9, 1e9, -1e9, -1e9];
+      var saved = [ex, tilt, hot, lift.slice()];
+      [0, 1].forEach(function (e) { [-E.tiltMax / 2, 0, E.tiltMax / 2].forEach(function (t) {
+        [-1, 0, n - 1].forEach(function (h) { ex = e; tilt = t; hot = h; for (var i = 0; i < n; i++) lift[i] = (h === i) ? E.lift : 0; draw(); });
+      }); });
+      var pad = E.pad;
+      svg.setAttribute('viewBox', (bb[0] - pad).toFixed(0) + ' ' + (bb[1] - pad).toFixed(0) + ' ' + (bb[2] - bb[0] + pad * 2).toFixed(0) + ' ' + (bb[3] - bb[1] + pad * 2).toFixed(0));
+      bb = null; ex = saved[0]; tilt = saved[1]; hot = saved[2]; lift = saved[3];
+    };
+    measure();
+    if (reduce) { ex = exT = 0.7; draw(); }
+    else {
+      // runs only while something is still moving and the figure is on screen; sleeps otherwise
+      var awake = false, visible = true, EPS = 0.002;
+      var loop = function () {
+        ex += (exT - ex) * 0.08; tilt += (tiltT - tilt) * 0.07;
+        var moving = Math.abs(exT - ex) > EPS || Math.abs(tiltT - tilt) > EPS;
+        for (var i = 0; i < n; i++) {
+          var goal = (hot === i) ? E.lift : 0;
+          lift[i] += (goal - lift[i]) * 0.14;
+          if (Math.abs(goal - lift[i]) > EPS) moving = true;
+        }
+        draw();
+        if (moving && visible) requestAnimationFrame(loop); else awake = false;
+      };
+      wake = function () { if (!awake && visible) { awake = true; requestAnimationFrame(loop); } };
+      if ('IntersectionObserver' in window) {
+        new IntersectionObserver(function (es) { visible = es[0].isIntersecting; if (visible) wake(); }).observe(fig);
+      }
+      draw(); wake();
+    }
+    if (pointerFx) {
+      fig.addEventListener('pointermove', function (e) {
+        var r = svg.getBoundingClientRect();
+        tiltT = ((e.clientX - r.left) / r.width - 0.5) * E.tiltMax;
+        if (hot < 0) exT = E.figureHover;
+        wake();
+      });
+      fig.addEventListener('pointerleave', function () { tiltT = 0; if (hot < 0) exT = E.rest; wake(); });
+    }
+  }
+
+  // ---- 5. process: drawn line icons, calm reveals, a ring pulse on each step ----
+  var rows = $('.wd-workflow-row');
+  if (rows.length) {
+    var arm = !reduce && 'IntersectionObserver' in window;
+    var io = arm ? new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('fx-in'); io.unobserve(e.target); } });
+    }, { threshold: 0.35 }) : null;
+    rows.forEach(function (row, i) {
+      var copy = row.querySelector('.wd-workflow-copy');
+      if (!copy) return;
+      var wrap = document.createElement('span');
+      wrap.className = 'fx-ico-wrap';
+      var s = document.createElementNS(CFG.svgNS, 'svg');
+      s.setAttribute('viewBox', '0 0 24 24');
+      s.setAttribute('class', 'fx-ico');
+      s.setAttribute('aria-hidden', 'true');
+      s.innerHTML = CFG.icons[i % CFG.icons.length];
+      wrap.appendChild(s);
+      copy.insertBefore(wrap, copy.firstChild);
+      if (io) { row.classList.add('fx-arm'); io.observe(row); } else row.classList.add('fx-in');
+    });
+  }
+
+  // ---- about: same treatment for the founder section ----
+  var founder = $('.wd-founder')[0];
+  if (founder) {
+    var A = CFG.about;
+    var portrait = founder.querySelector('.wd-founder-portrait');
+    if (portrait) {
+      var pf = document.createElement('div');
+      pf.className = 'fx-portrait-frame';
+      var pl = document.createElement('b'); pl.textContent = A.frameLabel;
+      pf.appendChild(pl); portrait.appendChild(pf);
+      if (pointerFx) {
+        portrait.classList.add('fx-tilt');
+        portrait.addEventListener('pointermove', function (e) {
+          var r = portrait.getBoundingClientRect();
+          var x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
+          portrait.style.transition = 'transform ' + CFG.tilt.moveMs + 'ms ease-out';
+          portrait.style.transform = 'perspective(' + CFG.tilt.perspective + 'px) rotateY(' + (x * A.tilt).toFixed(2) + 'deg) rotateX(' + (-y * A.tilt).toFixed(2) + 'deg)';
+        });
+        portrait.addEventListener('pointerleave', function () {
+          portrait.style.transition = 'transform ' + CFG.tilt.leaveMs + 'ms cubic-bezier(.2,.7,.2,1)';
+          portrait.style.transform = '';
+        });
+      }
+    }
+    $('.wd-founder-highlights li', founder).forEach(function (li, i) {
+      var wrap = document.createElement('span');
+      wrap.className = 'fx-ico-wrap';
+      var sv = document.createElementNS(CFG.svgNS, 'svg');
+      sv.setAttribute('viewBox', '0 0 24 24'); sv.setAttribute('class', 'fx-ico'); sv.setAttribute('aria-hidden', 'true');
+      sv.innerHTML = CFG.icons[A.highlightIcons[i % A.highlightIcons.length]];
+      wrap.appendChild(sv); li.insertBefore(wrap, li.firstChild);
+    });
+    if (!reduce && 'IntersectionObserver' in window) {
+      var fio = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('fx-in'); fio.unobserve(e.target); } });
+      }, { threshold: 0.3 });
+      founder.classList.add('fx-arm'); fio.observe(founder);
+    } else founder.classList.add('fx-in');
+  }
+
+  // ---- services: icons draw their own linework ----
+  var cards = $('.wd-service-card');
+  if (cards.length) {
+    var canArm = !reduce && 'IntersectionObserver' in window;
+    var sio = canArm ? new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        e.target.classList.remove('fx-svc-arm'); e.target.classList.add('fx-svc-in'); sio.unobserve(e.target);
+      });
+    }, { threshold: 0.4 }) : null;
+    cards.forEach(function (card, i) {
+      var own = CFG.svcIcons[card.getAttribute('data-service-id')];
+      var icon = card.querySelector('.wd-service-icon');
+      if (own && icon) icon.innerHTML = own;
+      $('.wd-service-icon *', card).forEach(function (shape) { shape.setAttribute('pathLength', '1'); });
+      card.style.setProperty('--fx-d', (i * CFG.svc.stagger).toFixed(2) + 's');
+      if (sio) { card.classList.add('fx-svc-arm'); sio.observe(card); }
+      if (pointerFx) {
+        card.addEventListener('pointerenter', function () {
+          card.classList.remove('fx-svc-in', 'fx-svc-redraw');
+          void card.offsetWidth;
+          card.classList.add('fx-svc-redraw');
+        });
+      }
+    });
+  }
+
+
+  // ---- 6/7. ink strokes: shared pen, then the Process line and the home lace ----
+  // A confident hand, not a wobble: one continuous curve (smooth through every waypoint), a soft start, a round pen tip,
+  // fuller where the pen rests and slimmer where it travels, and eased momentum so it glides behind the scroll.
+  var smooth = function (a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  // turns a centreline + per-point pressure into one filled ink shape with round tip and soft start
+  var inkOutline = function (P, press, F, baseW) {
+    var K = CFG.ink, n = P.length, Ls = [], Rs = [], tan = [], hw = [];
+    for (var q = 0; q < n; q++) {
+      var a = P[Math.max(q - 1, 0)], b = P[Math.min(q + 1, n - 1)];
+      var tx = b[0] - a[0], ty = b[1] - a[1], len = Math.hypot(tx, ty) || 1; tx /= len; ty /= len; tan.push([tx, ty]);
+      var w = baseW * press[q] * (K.startThin + (1 - K.startThin) * smooth(0, K.taper, F[q])) / 2; hw.push(w);
+      Ls.push([P[q][0] - ty * w, P[q][1] + tx * w]); Rs.push([P[q][0] + ty * w, P[q][1] - tx * w]);
+    }
+    var d = 'M' + Ls[0][0].toFixed(1) + ' ' + Ls[0][1].toFixed(1);
+    for (var l = 1; l < n; l++) d += 'L' + Ls[l][0].toFixed(1) + ' ' + Ls[l][1].toFixed(1);
+    var T = tan[n - 1], N = [-T[1], T[0]], wt = hw[n - 1];
+    for (var c1 = 1; c1 <= 8; c1++) { var an = Math.PI * c1 / 8; d += 'L' + (P[n - 1][0] + wt * (N[0] * Math.cos(an) + T[0] * Math.sin(an))).toFixed(1) + ' ' + (P[n - 1][1] + wt * (N[1] * Math.cos(an) + T[1] * Math.sin(an))).toFixed(1); }
+    for (var r = n - 2; r >= 0; r--) d += 'L' + Rs[r][0].toFixed(1) + ' ' + Rs[r][1].toFixed(1);
+    var T0 = tan[0], N0 = [-T0[1], T0[0]], w0 = hw[0];
+    for (var c2 = 1; c2 < 8; c2++) { var a2 = Math.PI * c2 / 8; d += 'L' + (P[0][0] + w0 * (-N0[0] * Math.cos(a2) - T0[0] * Math.sin(a2))).toFixed(1) + ' ' + (P[0][1] + w0 * (-N0[1] * Math.cos(a2) - T0[1] * Math.sin(a2))).toFixed(1); }
+    return d + 'Z';
+  };
+  // paints the first fraction p (of arc length) of a stroke
+  var inkDraw = function (path, pts, press, cum, total, p, baseW) {
+    var s = p * total;
+    if (s <= 0.5 || pts.length < 2) { path.setAttribute('d', ''); return; }
+    var P = [], PR = [], F = [], i = 0;
+    for (; i < pts.length && cum[i] <= s; i++) { P.push(pts[i]); PR.push(press[i]); F.push(cum[i]); }
+    if (i < pts.length && i > 0) {
+      var f0 = (s - cum[i - 1]) / Math.max(cum[i] - cum[i - 1], 1e-6);
+      P.push([pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f0, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f0]);
+      PR.push(press[i - 1] + (press[i] - press[i - 1]) * f0); F.push(s);
+    }
+    if (P.length < 2) { path.setAttribute('d', ''); return; }
+    path.setAttribute('d', inkOutline(P, PR, F, baseW));
+  };
+  var arcTable = function (pts) {
+    var cum = [0], total = 0;
+    for (var k = 1; k < pts.length; k++) { total += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); cum.push(total); }
+    return { cum: cum, total: total };
+  };
+
+  // paints a long stroke as chunks, so a frame only repaints the chunk the pen is in (finished chunks never change;
+  // repainting one page-tall shape every frame is what made it stutter)
+  var makeChunks = function (group, pts, press, cum, total, baseW, size) {
+    while (group.firstChild) group.removeChild(group.firstChild);
+    var chunks = [], a = 0;
+    while (a < pts.length - 1) {
+      var b = a + 1;
+      while (b < pts.length - 1 && cum[b] - cum[a] < size) b++;
+      var el = document.createElementNS(CFG.svgNS, 'path'); el.setAttribute('class', 'fx-ink-line'); group.appendChild(el);
+      chunks.push({ a: a, b: b, el: el, state: 0, full: null });
+      a = b;
+    }
+    var outline = function (c, upTo, tip) {
+      var P = [], PR = [], F = [];
+      for (var i = c.a; i <= upTo; i++) { P.push(pts[i]); PR.push(press[i]); F.push(cum[i]); }
+      if (tip) { P.push(tip.p); PR.push(tip.press); F.push(tip.f); }
+      return P.length < 2 ? '' : inkOutline(P, PR, F, baseW);
+    };
+    // finished-chunk shapes are computed ahead of time while the browser is idle, one chunk per slice
+    var warm = 0, later = window.requestIdleCallback || function (fn) { return setTimeout(fn, 60); };
+    var warmNext = function () {
+      if (warm >= chunks.length) return;
+      var c = chunks[warm++]; if (!c.full) c.full = outline(c, c.b, null);
+      later(warmNext);
+    };
+    later(warmNext);
+    return {
+      draw: function (p) {
+        var s = p * total;
+        for (var k = 0; k < chunks.length; k++) {
+          var c = chunks[k];
+          if (s >= cum[c.b]) {
+            if (c.state !== 1) { if (!c.full) c.full = outline(c, c.b, null); c.el.setAttribute('d', c.full); c.state = 1; }
+          } else if (s <= cum[c.a] + 0.5) {
+            if (c.state !== 0) { c.el.setAttribute('d', ''); c.state = 0; }
+          } else {
+            var i = c.a; while (i < c.b && cum[i + 1] <= s) i++;
+            var f0 = (s - cum[i]) / Math.max(cum[i + 1] - cum[i], 1e-6);
+            var tip = { p: [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * f0, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * f0], press: press[i] + (press[i + 1] - press[i]) * f0, f: s };
+            c.el.setAttribute('d', outline(c, i, tip)); c.state = 2;
+          }
+        }
+      }
+    };
+  };
+
+  // ---- 6. process: the straight bar gives way to the ink stroke ----
+  var rail = $('.wd-workflow-rail')[0];
+  var stepNodes = rail ? $('.wd-workflow-node', rail) : [];
+  if (rail && stepNodes.length > 1) {
+    var K = CFG.ink;
+    var inkSvg = document.createElementNS(CFG.svgNS, 'svg');
+    inkSvg.setAttribute('class', 'fx-ink'); inkSvg.setAttribute('aria-hidden', 'true');
+    var ghost = document.createElementNS(CFG.svgNS, 'path'); ghost.setAttribute('class', 'fx-ink-ghost');
+    var inkPath = document.createElementNS(CFG.svgNS, 'path'); inkPath.setAttribute('class', 'fx-ink-line');
+    inkSvg.appendChild(ghost); inkSvg.appendChild(inkPath);
+    rail.insertBefore(inkSvg, rail.firstChild);
+    var rp = [], rpress = [], rarc = { cum: [0], total: 0 }, baseW = 5, yFirst = 0, yLast = 1, cur = 0, tgt = 0, running = false;
+    var build = function () {
+      var rr = rail.getBoundingClientRect();
+      var c = stepNodes.map(function (n) { var b = n.getBoundingClientRect(); return [b.left - rr.left + b.width / 2, b.top - rr.top + b.height / 2]; });
+      inkSvg.setAttribute('width', rr.width); inkSvg.setAttribute('height', rr.height);
+      inkSvg.setAttribute('viewBox', '0 0 ' + rr.width + ' ' + rr.height);
+      baseW = parseFloat(getComputedStyle(rail).getPropertyValue('--wd-flow-width')) || 5;
+      yFirst = c[0][1]; yLast = c[c.length - 1][1];
+      rp = []; rpress = [];
+      for (var i = 0; i < c.length - 1; i++) {
+        var A = c[i], B = c[i + 1], h = B[1] - A[1], dx = (i % 2 ? -1 : 1) * h * K.ampRatio, dy = h * K.bow;
+        var P1 = [A[0] + dx, A[1] + dy], P2 = [B[0] + dx, B[1] - dy];
+        var steps = Math.max(8, Math.round(Math.hypot(B[0] - A[0], h) / K.step));
+        for (var j = (i === 0 ? 0 : 1); j <= steps; j++) {
+          var t = j / steps, m = 1 - t;
+          rp.push([m * m * m * A[0] + 3 * m * m * t * P1[0] + 3 * m * t * t * P2[0] + t * t * t * B[0], m * m * m * A[1] + 3 * m * m * t * P1[1] + 3 * m * t * t * P2[1] + t * t * t * B[1]]);
+          rpress.push(K.pressMin + (1 - K.pressMin) * (0.5 + 0.5 * Math.cos(2 * Math.PI * t)));
+        }
+      }
+      rarc = arcTable(rp);
+      ghost.setAttribute('d', 'M' + rp.map(function (p) { return p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join('L'));
+    };
+    var paintRail = function (p) { inkDraw(inkPath, rp, rpress, rarc.cum, rarc.total, p, baseW); };
+    var railTarget = function () {
+      var top = rail.getBoundingClientRect().top, line = innerHeight * K.readLine;
+      return Math.max(0, Math.min(1, (line - (top + yFirst)) / Math.max(yLast - yFirst, 1)));
+    };
+    var railFrame = function () {
+      tgt = railTarget(); cur += (tgt - cur) * K.ease;
+      if (Math.abs(tgt - cur) < 0.0004) { cur = tgt; paintRail(cur); running = false; return; }
+      paintRail(cur); requestAnimationFrame(railFrame);
+    };
+    var railKick = function () { if (!running) { running = true; requestAnimationFrame(railFrame); } };
+    build();
+    if (reduce) { cur = 1; paintRail(1); }
+    else {
+      railKick();
+      addEventListener('scroll', railKick, { passive: true });
+      if ('ResizeObserver' in window) new ResizeObserver(function () { build(); paintRail(cur); railKick(); }).observe(rail);
+      else addEventListener('resize', function () { build(); paintRail(cur); railKick(); });
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { build(); paintRail(cur); });
+    }
+  }
+
+  // ---- 7. home: the lace, redrawn as one smooth pen stroke ----
+  var siteLace = $('.wd-flow-clip')[0];
+  var laceStart = document.querySelector('[data-wd-flow="start"]');
+  var laceEnd = document.querySelector('[data-wd-flow="end"]');
+  if (siteLace && laceStart && laceEnd) {
+    var H = CFG.lace, NS = CFG.svgNS;
+    var lace = document.createElementNS(NS, 'svg');
+    lace.setAttribute('class', 'fx-lace'); lace.setAttribute('aria-hidden', 'true');
+    var laceDefs = document.createElementNS(NS, 'defs');
+    var laceMask = document.createElementNS(NS, 'mask'); laceMask.setAttribute('id', 'fx-lace-cut'); laceMask.setAttribute('maskUnits', 'userSpaceOnUse');
+    laceDefs.appendChild(laceMask); lace.appendChild(laceDefs);
+    var laceG = document.createElementNS(NS, 'g'); laceG.setAttribute('mask', 'url(#fx-lace-cut)');
+    lace.appendChild(laceG);
+    var laceInk = null;
+    var siteArrow = siteLace.querySelector('.wd-flow-name-arrow');
+    var laceArrow = null, arrowInner = null;
+    if (siteArrow) {
+      arrowInner = siteArrow.cloneNode(true);
+      arrowInner.setAttribute('visibility', 'visible'); arrowInner.removeAttribute('hidden');
+      arrowInner.setAttribute('class', (arrowInner.getAttribute('class') || '') + ' fx-arrow');
+      laceArrow = document.createElementNS(NS, 'g'); laceArrow.appendChild(arrowInner); lace.appendChild(laceArrow);
+    }
+    document.body.appendChild(lace);
+
+    var lp = [], lpress = [], lkeys = [], larc = { cum: [0], total: 0 }, lcur = 0, ltgt = 0, lrun = false, lon = false, arrowAt = null;
+    var docRect = function (el) { var b = el.getBoundingClientRect(); return { left: b.left + scrollX, right: b.right + scrollX, top: b.top + scrollY, bottom: b.bottom + scrollY, width: b.width, height: b.height }; };
+    var lastKey = 0;
+    var put = function (x, y, press, key) { lp.push([x, y]); lpress.push(press); lastKey = Math.max(lastKey, key); lkeys.push(lastKey); };
+    var dist = function (a, b) { return Math.hypot(b.x - a.x, b.y - a.y); };
+    // one smooth curve through waypoints; a point with v:true is passed heading straight down
+    var spline = function (list) {
+      var n = list.length, m = [];
+      for (var i = 0; i < n; i++) {
+        var pv = list[Math.max(i - 1, 0)], nx = list[Math.min(i + 1, n - 1)], end = (i === 0 || i === n - 1);
+        var seg = (dist(pv, list[i]) + dist(list[i], nx)) / (end ? 1 : 2);
+        m.push((list[i].v || end) ? [0, seg] : [(nx.x - pv.x) / 2, (nx.y - pv.y) / 2]);
+      }
+      for (var s = 0; s < n - 1; s++) {
+        var a = list[s], b = list[s + 1];
+        var c1 = [a.x + m[s][0] / 3, a.y + m[s][1] / 3], c2 = [b.x - m[s + 1][0] / 3, b.y - m[s + 1][1] / 3];
+        var steps = Math.max(3, Math.round(dist(a, b) / H.step));
+        for (var j = 1; j <= steps; j++) {
+          var t = j / steps, u = 1 - t;
+          var x = u * u * u * a.x + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * b.x;
+          var y = u * u * u * a.y + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * b.y;
+          put(x, y, (a.p || H.press) + ((b.p || H.press) - (a.p || H.press)) * smooth(0, 1, t), y);
+        }
+      }
+    };
+    // a loop around a word: leaves the line heading down at its west point, circles once (counter-clockwise), carries on down
+    // fromEast: the mirror image, for words that sit left of the line (enters at the east point, circles clockwise)
+    var loopAround = function (x, cy, rx, ry, fromEast) {
+      var cx = fromEast ? x - rx : x + rx, steps = Math.max(24, Math.round(2 * Math.PI * Math.max(rx, ry) / H.step));
+      for (var j = 1; j <= steps; j++) {
+        var t = j / steps, th = fromEast ? t * 2 * Math.PI : Math.PI - t * 2 * Math.PI;
+        put(cx + rx * Math.cos(th), cy + ry * Math.sin(th), H.press + (1 - H.press) * Math.sin(Math.PI * t), cy + t * ry);
+      }
+    };
+    // a card is stacked when its text sits under its picture (tablet and phone)
+    var isStacked = function (it) {
+      var c = it.querySelector('.wd-portfolio-copy'), im = it.querySelector('.wd-portfolio-image');
+      return !!(c && im && docRect(c).top > docRect(im).bottom - 12);
+    };
+    var cutHoles = function () {
+      var holes = [];
+      $('.wd-portfolio-item').forEach(function (it) { var sf = it.querySelector('.wd-portfolio-safari'); if (sf && !isStacked(it)) holes.push(docRect(sf)); });
+      var em = document.querySelector('.wd-founder-contact a[href^="mailto:"]');
+      if (em) { var b = docRect(em); holes.push({ left: b.left - H.emailPad, top: b.top - H.emailPad, width: b.width + H.emailPad * 2, height: b.height + H.emailPad * 2 }); }
+      return holes;
+    };
+    var laceBaseW = function () { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--wd-flow-width')) || 5; };
+    var buildLace = function () {
+      var items = $('.wd-portfolio-item');
+      var ok = items.length > 0;
+      document.documentElement.classList.toggle('fx-lace-on', ok);
+      lace.style.display = ok ? '' : 'none';
+      lon = ok; if (!ok) return;
+      lp = []; lpress = []; lkeys = []; lastKey = 0; arrowAt = null;
+      var docW = document.documentElement.clientWidth, docH = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      lace.setAttribute('width', docW); lace.setAttribute('height', docH); lace.setAttribute('viewBox', '0 0 ' + docW + ' ' + docH);
+      var sb = docRect(laceStart), sx = sb.left + sb.width / 2, sy = sb.bottom;
+      put(sx, sy, H.press, sy);
+      var cursor = { x: sx, y: sy, v: true }, lastGutter = null, lastExit = null;
+      items.forEach(function (it) {
+        var box = docRect(it), copy = it.querySelector('.wd-portfolio-copy'), image = it.querySelector('.wd-portfolio-image'), link = it.querySelector('.wd-portfolio-link');
+        var stackedCard = isStacked(it), ib = docRect(image), cb = docRect(copy);
+        var copyLeft = !stackedCard && cb.left < ib.left;   // zig-zag: the text column sits left of the picture
+        var y = Math.round(box.top + box.height / 2), rx = 0, ry = 0, gx, lx;
+        if (stackedCard) gx = Math.round(box.left + H.rail);
+        else {
+          var gap = copyLeft ? ib.left - cb.right : cb.left - ib.right;
+          gx = Math.round(gap > H.clearance * 2 ? (copyLeft ? cb.right : ib.right) + gap / 2 : (copyLeft ? cb.right + H.clearance : ib.right + H.clearance));
+        }
+        lx = gx;
+        if (link) {
+          var lb = docRect(link), padX = stackedCard ? Math.max(4, Math.min(H.linkPad, lb.left - H.edge)) : H.linkPad;
+          y = Math.round(lb.top + lb.height / 2); rx = Math.round(lb.width / 2 + padX); ry = Math.round(lb.height / 2 + H.linkPad);
+          if (stackedCard) lx = Math.round(lb.left - padX);
+          else lx = Math.round(copyLeft ? lb.left + lb.width / 2 + rx : lb.left + lb.width / 2 - rx);
+          gx = lx;   // the line runs straight through the loop's tangent; any sideways shift happens in the space between cards
+        }
+        spline([cursor, { x: gx, y: box.top + 24, v: true }, { x: lx, y: y - ry, v: true }, { x: lx, y: y, v: true, p: H.press }]);
+        if (rx >= H.loopMin) loopAround(lx, y, rx, ry, copyLeft);
+        cursor = { x: lx, y: y, v: true };
+        spline([cursor, { x: lx, y: y + ry, v: true }, { x: gx, y: box.bottom - 12, v: true }]);
+        cursor = { x: gx, y: box.bottom - 12, v: true }; lastGutter = gx; lastExit = box.bottom - 12;
+      });
+      var t1 = document.querySelector('.wd-founder-copy h2'), nm = document.querySelector('.wd-founder-name'), rl = document.querySelector('.wd-founder-role');
+      var idRight = 0, lt = 0, lb2 = 0, seen = false;
+      [t1, nm, rl].forEach(function (e) { if (!e) return; var b = docRect(e); idRight = Math.max(idRight, b.right); if (e === t1) return; if (!seen) { lt = b.top; lb2 = b.bottom; seen = true; return; } lt = Math.min(lt, b.top); lb2 = Math.max(lb2, b.bottom); });
+      arrowAt = null;
+      if (seen && idRight > 0) {
+        var narrow = innerWidth < 640, vpRight = docW - H.pad;
+        var ix = Math.round(idRight + (narrow ? 12 : H.clearance)), iy = Math.round((lt + lb2) / 2);
+        var R = Math.min(H.loopRadius, Math.max(0, (vpRight - ix) / 2 - 8));
+        if (narrow) {
+          R = Math.min(R, 26);
+          if (R < H.loopMin && vpRight - ix > H.loopMin * 2 + 8) R = H.loopMin;
+          else if (R < H.loopMin) { ix = Math.round(vpRight - H.loopMin * 2 - 8); R = Math.min(26, Math.max(H.loopMin, Math.floor((vpRight - ix) / 2 - 8))); }
+        } else if (R < H.loopMin) R = 0;
+        if (R > 0 && ix + 2 * R > vpRight) ix = Math.round(vpRight - 2 * R);
+        var titleTop = t1 ? docRect(t1).top : lt;
+        var portraitEl = document.querySelector('.wd-founder-portrait');
+        var founderStacked = !!(portraitEl && titleTop > docRect(portraitEl).bottom - 12);
+        var approach = Math.max(Math.min(iy - Math.max(R, H.loopMin), titleTop + 8), (lastExit === null ? 0 : lastExit) + 60);
+        if (lastGutter !== null && Math.abs(lastGutter - ix) > H.clearance) {
+          // one long sweep through the empty band above the heading, then straight down beside the text
+          var midY = founderStacked ? titleTop - 70 : lastExit + (titleTop - lastExit) * 0.5;
+          midY = Math.max(midY, lastExit + 24);
+          approach = Math.max(approach, midY + 85);
+          spline([cursor, { x: Math.round((lastGutter + ix) / 2), y: Math.round(midY) }, { x: ix, y: approach, v: true }]);
+          cursor = { x: ix, y: approach, v: true };
+        }
+        spline([cursor, { x: ix, y: iy, v: true }]);
+        cursor = { x: ix, y: iy, v: true };
+        if (R >= 8) { loopAround(ix, iy, R, R, false); arrowAt = { x: ix + R, y: iy, idx: lp.length - 1, scale: narrow ? 0.42 : 1 }; }
+        spline([cursor, { x: ix, y: lb2 + H.clearance, v: true }]);
+        cursor = { x: ix, y: lb2 + H.clearance, v: true };
+      }
+      var eb = docRect(laceEnd.querySelector('.btn-primary') || laceEnd);
+      spline([cursor, { x: Math.round(eb.left + eb.width / 2), y: Math.round(eb.top), v: true }]);
+      larc = arcTable(lp);
+      laceInk = makeChunks(laceG, lp, lpress, larc.cum, larc.total, laceBaseW(), H.chunk);
+      // mask: the line passes behind the desktop screenshots and the email link
+      while (laceMask.firstChild) laceMask.removeChild(laceMask.firstChild);
+      laceMask.setAttribute('x', 0); laceMask.setAttribute('y', 0); laceMask.setAttribute('width', docW); laceMask.setAttribute('height', docH);
+      var base = document.createElementNS(NS, 'rect'); base.setAttribute('width', docW); base.setAttribute('height', docH); base.setAttribute('fill', '#fff'); laceMask.appendChild(base);
+      cutHoles().forEach(function (hl) { var rc = document.createElementNS(NS, 'rect'); rc.setAttribute('x', hl.left - H.cutPad); rc.setAttribute('y', hl.top - H.cutPad); rc.setAttribute('width', hl.width + H.cutPad * 2); rc.setAttribute('height', hl.height + H.cutPad * 2); rc.setAttribute('rx', 12); rc.setAttribute('fill', '#000'); laceMask.appendChild(rc); });
+    };
+    var paintLace = function (p) {
+      if (!lon) return;
+      if (laceInk) laceInk.draw(p);
+      if (laceArrow && arrowAt) {
+        // fades and scales in once the pen has closed the loop; fades back out if you scroll up past it
+        laceArrow.setAttribute('transform', 'translate(' + arrowAt.x + ' ' + arrowAt.y + ') rotate(' + H.arrowDeg + ') scale(' + arrowAt.scale + ')');
+        arrowInner.classList.toggle('on', p * larc.total >= larc.cum[arrowAt.idx] - 0.5);
+      } else if (arrowInner) arrowInner.classList.remove('on');
+    };
+    // scroll position -> how much of the stroke is drawn (loops get their own slice of scroll so they draw smoothly)
+    var laceTarget = function () {
+      if (!lkeys.length) return 0;
+      var ty = scrollY + innerHeight * H.readLine;
+      if (ty <= lkeys[0]) return 0;
+      if (ty >= lkeys[lkeys.length - 1]) return 1;
+      var lo = 0, hi = lkeys.length - 1;
+      while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (lkeys[mid] <= ty) lo = mid; else hi = mid; }
+      var f = (ty - lkeys[lo]) / Math.max(lkeys[hi] - lkeys[lo], 1e-6);
+      return (larc.cum[lo] + (larc.cum[hi] - larc.cum[lo]) * f) / Math.max(larc.total, 1);
+    };
+    var laceFrame = function () {
+      ltgt = laceTarget(); lcur += (ltgt - lcur) * H.ease;
+      if (Math.abs(ltgt - lcur) < 0.0003) { lcur = ltgt; paintLace(lcur); lrun = false; return; }
+      paintLace(lcur); requestAnimationFrame(laceFrame);
+    };
+    var laceKick = function () { if (!lrun) { lrun = true; requestAnimationFrame(laceFrame); } };
+    var relayout = function () { buildLace(); if (reduce) { lcur = 1; paintLace(1); } else { paintLace(lcur); laceKick(); } };
+    var pending = false;
+    var schedule = function () { if (pending) return; pending = true; requestAnimationFrame(function () { pending = false; relayout(); }); };
+    relayout();
+    if (!reduce) addEventListener('scroll', laceKick, { passive: true });
+    if ('ResizeObserver' in window) new ResizeObserver(schedule).observe(document.body); else addEventListener('resize', schedule);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(schedule);
+    addEventListener('load', schedule);
+  }
+
+})();
 })();
 </script>
 
